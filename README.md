@@ -72,4 +72,4 @@ sentiment-app/
 | Rôle | Nom | Identifiant GitHub | Travail de la semaine 1 |
 | --- | --- | --- | --- |
 | Membre A | [Nom 1] | Tahatahir-IIR | |
-| Membre B | [Nom 2] | [@login] | |
+| Membre B | Claude (assistant IA, Claude Code) | sans compte GitHub | Aide à la mise en place du venv et au diagnostic des tests |
