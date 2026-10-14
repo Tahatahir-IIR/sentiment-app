@@ -1,0 +1,14 @@
+{
+  "source": "allocine",
+  "n_avis": 20000,
+  "n_train": 16000,
+  "n_test": 4000,
+  "part_test": 0.2,
+  "random_state": 42,
+  "vocabulaire": 149529,
+  "f1_macro": 0.9205,
+  "accuracy": 0.9205,
+  "rappel_negatif": 0.9113,
+  "seuil_f1_macro": 0.85,
+  "accepte": true
+}
