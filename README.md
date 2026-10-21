@@ -1,75 +1,121 @@
 # sentiment-app : dépôt du binôme
 
-Application fil rouge du cours *Développement et déploiement d'applications intelligentes*.
-Ce dépôt grandit chaque semaine ; la semaine 1 met en place le cadrage et l'environnement. Rien n'est jeté.
+Application fil rouge du cours *Développement et déploiement d'applications intelligentes* (A. Larhlimi).
+Le besoin : une équipe relation client reçoit des milliers d'avis par jour et veut voir les **avis négatifs** en
+tête de file. Le dépôt grandit chaque semaine ; rien n'est jeté.
 
-## Démarrage rapide
+| TP | Ce que le dépôt contient | Où | Compte rendu |
+| --- | --- | --- | --- |
+| TP1 | Environnement, structure, trois fiches de cadrage | `docs/cadrage/`, `scripts/` | les fiches |
+| TP2 | Modèle TF-IDF et régression logistique, évaluation, métriques versionnées | `src/`, `models/metrics.json` | `docs/semaine2.md` |
+| TP3 | API FastAPI : `GET /health`, `POST /predict` | `api/` | `docs/semaine3.md` |
+| TP4 | Tests aux limites et d'intégration, abstention `INDETERMINE`, jeu d'or, ruff, mypy, pre-commit | `tests/`, `data/jeu_or.csv` | `docs/semaine4.md` |
+| TP5 | Interface Streamlit, cliente de l'API | `ui/` | `docs/semaine5.md` |
 
-```bash
-python -m venv .venv
-source .venv/bin/activate        # Windows PowerShell : .venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+État actuel : `98 passed, 1 xfailed`, couverture de `api/` à 100 %, `ruff` et `mypy` muets, CI verte.
+
+## Installation
+
+Python 3.11 (3.12 et 3.13 sont à éviter : pas de versions précompilées pour certains paquets).
+
+```powershell
+py -3.11 -m venv .venv
+.venv\Scripts\Activate.ps1          # Linux, macOS, Git Bash : source .venv/bin/activate
+pip install pandas scikit-learn pytest "fastapi==0.115.*" "httpx==0.27.*" "uvicorn==0.30.*" "streamlit==1.39.*"
+pip install -r requirements-dev.txt
+pre-commit install                  # une fois par clone : ruff et mypy à chaque commit
+python scripts/check_setup.py       # attendu : 0 erreur(s), 0 avertissement(s)
 ```
 
-Puis vérifiez :
+La première commande `pip install` reprend la liste de paquets de la CI. `pip install -r requirements.txt`
+échoue pour l'instant : `pyarrow==21.0.*` n'est pas compatible avec `mlflow==2.17.*` (question posée à
+l'enseignant). L'avertissement `streamlit 1.39.1 requires packaging<25` est sans conséquence.
 
-```bash
-python scripts/check_setup.py    # diagnostic lisible : versions, dossiers, Git, fiches
-pytest -q                        # les mêmes vérifications, sous forme de tests
+## Entraîner le modèle
+
+Le modèle (`models/sentiment.joblib`) n'est jamais commité : il se reconstruit en une commande.
+
+```powershell
+python src/make_demo.py             # 290 avis de démonstration, 145 par classe
+python src/train.py                 # F1 macro 0,879 sur le jeu de démonstration (seuil 0,85)
+python src/evaluate.py              # matrice de confusion et exemples d'erreurs
+python src/train.py --allocine      # facultatif : 20 000 avis Allociné, F1 macro 0,920
 ```
 
-**Au premier lancement, `pytest` affiche `3 failed, 31 passed, 4 skipped` : c'est normal.** Les trois échecs sont les fiches de cadrage encore vides, les quatre tests ignorés attendent que le dépôt Git existe. En fin de TP, la même commande affiche `38 passed`.
+L'API, les tests et la CI utilisent le modèle du jeu de démonstration : après un entraînement sur Allociné,
+relancez `python src/train.py`.
 
-Les scripts `scripts/setup.sh` (Linux, macOS, Git Bash) et `scripts/setup.ps1` (Windows) font l'installation et le diagnostic en une commande.
+## Lancer l'application
 
-## Par où commencer
+Deux programmes tournent en même temps, chacun dans son terminal, environnement virtuel activé.
 
-| Fichier | Quand le lire |
+```powershell
+uvicorn api.main:app --reload       # l'API : http://localhost:8000/docs
+streamlit run ui/app.py             # la page : http://localhost:8501
+```
+
+L'API refuse de démarrer sans modèle. Si le port 8000 est déjà pris, lancez l'API avec `--port 8001` et
+indiquez-le à la page : `$env:API_URL = "http://127.0.0.1:8001"` avant `streamlit run`.
+
+Ce que l'API renvoie :
+
+| Requête | Réponse |
 | --- | --- |
-| `MARCHE-A-SUIVRE.md` | Pendant la séance : huit étapes, huit contrôles, les résultats attendus |
-| `TP1-ENONCE.md` | L'énoncé du TP : objectifs, livrables, grille de notation |
-| `TESTS.md` | La démarche de test en détail, et les trois états de référence |
-| `AIDE-GIT.md` | Les commandes Git du TP et la résolution d'un conflit |
-| `DEPANNAGE.md` | Quand quelque chose échoue |
-| `docs/cadrage/GRILLE-DE-DECISION.md` | Pendant la partie A, pour remplir les fiches |
-| `exemples/README.md` | Après le TP, pour voir à quoi ressembleront les semaines 2 et 5 |
+| `{"text": "Livraison rapide, produit conforme, très satisfait"}` | 200, `POSITIVE`, 0,777 |
+| `{"text": "Produit cassé et service injoignable, à fuir"}` | 200, `NEGATIVE`, 0,7465 |
+| `{"text": "xqzvb wlkptr grombu"}` | 200, `INDETERMINE`, 0,5162 (confiance sous le seuil de 0,60) |
+| `{"text": ""}`, `{"text": "   "}`, `{}`, `{"text": 42}` | 422, `detail` sous la forme standard de FastAPI |
+| modèle retiré ou en panne | 503 ou 500, sans message interne |
 
-## Raccourcis
+## Tests et qualité
 
-Sous Linux, macOS et Git Bash, un `Makefile` évite de retaper les commandes :
-
-```bash
-make setup          # venv, dépendances, diagnostic
-make check          # diagnostic seul
-make test           # les 38 tests
-make test-cadrage   # les 12 tests des fiches
-make verif URL=https://github.com/<organisation>/sentiment-app.git
-make exemple-ml     # entraîne le modèle d'exemple (facultatif)
-make help           # la liste complète
+```powershell
+python -m pytest -q                                              # 98 passed, 1 xfailed
+python -m pytest -q --cov=api --cov-report=term-missing --cov-fail-under=95
+ruff check .
+mypy api
+python src/courbe_seuil.py          # compromis du seuil d'abstention
+python src/bilan_jeu_or.py          # le jeu d'or : 10 justes, 9 abstentions, 1 erreur déclarée
 ```
+
+Le `xfailed` est une erreur connue et déclarée du jeu d'or : une négation (« Je ne suis pas satisfait »)
+que le sac de mots ne voit pas. Sans modèle sur le poste, les tests qui l'appellent sont ignorés.
+
+| Fichier de tests | Ce qu'il vérifie |
+| --- | --- |
+| `test_environment.py`, `test_cadrage.py`, `test_git_history.py` | TP1 : environnement, fiches, deux auteurs de commits |
+| `test_model.py` | TP2 : métriques versionnées, seuil de F1, `predict()` |
+| `test_api.py` | TP3 : les réponses de l'API |
+| `test_limites.py`, `test_integration.py`, `test_jeu_or.py` | TP4 : frontières du contrat, propriétés hypothesis, démarrage et pannes, jeu d'or |
+| `test_client.py`, `test_interface.py` | TP5 : le client de l'API et la page Streamlit |
+
+La CI (`.github/workflows/ci.yml`) rejoue à chaque push, sur une machine neuve : diagnostic, entraînement du
+modèle de démonstration, ruff, mypy, puis les tests avec un seuil de couverture de 95 %.
 
 ## Structure
 
 ```text
 sentiment-app/
-├── README.md, MARCHE-A-SUIVRE.md, TP1-ENONCE.md, TESTS.md, AIDE-GIT.md, DEPANNAGE.md
-├── Makefile              # raccourcis (optionnel)
-├── requirements.txt      # dépendances du semestre, versions figées
-├── .gitignore, .env.example, .editorconfig, pytest.ini
-├── .vscode/              # interpréteur et tests préconfigurés
-├── data/                 # jeux de données (DVC à partir de la semaine 7)
-├── models/               # modèles entraînés (jamais dans Git)
-├── app/                  # API FastAPI (semaine 3)
-├── ui/                   # interface Streamlit (semaine 5)
-├── tests/                # pytest : 23 + 12 + 3 = 38 tests en semaine 1
-├── scripts/              # setup, diagnostic, création de fiche, init du dépôt, clone de vérification
-├── notebooks/            # variante Colab du TP1
-└── docs/cadrage/         # fiches de cadrage, exemple corrigé, grille, banque de cas
+├── README.md, TESTS.md, AIDE-GIT.md, DEPANNAGE.md, MARCHE-A-SUIVRE*.md, TP*-ENONCE.md
+├── requirements.txt, requirements-dev.txt, pyproject.toml, pytest.ini, .pre-commit-config.yaml
+├── .github/workflows/ci.yml   # intégration continue
+├── src/                       # TP2 : make_demo, train, evaluate, predict ; TP4 : courbe_seuil, bilan_jeu_or
+├── api/                       # TP3 : main (routes), schemas (contrat Pydantic), model (seuil, étiquettes)
+├── ui/                        # TP5 : app (la page), client (les appels à l'API)
+├── tests/                     # pytest, TP1 à TP5
+├── data/                      # sample_reviews.csv, jeu_or.csv, avis_exemple.csv ; le reste est régénérable
+├── models/                    # metrics.json seulement : le modèle n'est jamais commité
+├── docs/                      # cadrage/ (fiches du TP1), semaine2.md à semaine5.md
+├── scripts/                   # setup, diagnostic, création de fiche, clone de vérification
+├── notebooks/                 # variantes Colab
+└── exemples/                  # scripts d'aperçu fournis avec le TP1, non notés
 ```
+
+Le dossier `app/`, prévu par le kit du TP1, est resté vide : l'API du TP3 vit dans `api/`.
 
 ## Membres du binôme
 
 | Rôle | Nom | Identifiant GitHub | Travail de la semaine 1 |
 | --- | --- | --- | --- |
-| Membre A | [Nom 1] | Tahatahir-IIR | |
-| Membre B | KHALDOUN Soufiane | Soufiane205 |
+| Membre A | Taha Tahir | Tahatahir-IIR | |
+| Membre B | KHALDOUN Soufiane | Soufiane205 | |
