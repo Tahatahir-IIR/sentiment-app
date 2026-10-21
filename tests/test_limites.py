@@ -1,15 +1,22 @@
-"""Tests aux limites du contrat d'entrée (TP4, étape B). À COMPLÉTER.
+"""Tests aux limites du contrat d'entrée (TP4, étape B).
 
 PredictRequest promet un champ « text », chaîne de 1 à 2000 caractères.
 Ce fichier vérifie cette promesse à ses frontières, puis au hasard (hypothesis).
 """
 import json
+import sys
 from pathlib import Path
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 MODELE = Path(__file__).resolve().parents[1] / "models" / "sentiment.joblib"
 pytestmark = pytest.mark.skipif(not MODELE.exists(), reason="modèle non produit : python src/train.py")
+
+ETIQUETTES_DU_CONTRAT = {"POSITIVE", "NEGATIVE", "INDETERMINE"}
+# Tous les caractères que str.strip() retire : la règle de « vide » de predict() au TP2
+BLANCS = [chr(c) for c in range(sys.maxunicode + 1) if chr(c).isspace()]
 
 
 @pytest.fixture(scope="module")
@@ -28,12 +35,26 @@ def en_json(valeur: object) -> bytes:
     return json.dumps(valeur).encode("utf-8")
 
 
-# Étape B.1 : huit cas au moins, chacun avec son code attendu. Deux sont donnés.
-# À ajouter : texte fait d'espaces, un seul caractère, exactement 2000 caractères,
-# champ absent, champ d'un autre type (42), corps qui n'est pas du JSON (b"pas du json").
+def assert_422_standard(reponse) -> None:
+    """Un refus doit avoir la forme standard de FastAPI : une liste d'objets loc, msg, type."""
+    assert reponse.status_code == 422
+    detail = reponse.json()["detail"]
+    assert isinstance(detail, list) and detail, f"detail n'est pas une liste d'erreurs : {detail!r}"
+    for erreur in detail:
+        assert {"loc", "msg", "type"} <= erreur.keys(), f"erreur sans loc, msg ou type : {erreur!r}"
+
+
 CAS = [
     pytest.param(en_json({"text": ""}), 422, id="texte-vide"),
+    pytest.param(en_json({"text": "   "}), 422, id="espaces-seuls"),
+    # trouvé par hypothesis : U+0085 (NEL) est un blanc pour str.strip(), pas pour min_length
+    pytest.param(en_json({"text": "\x85"}), 422, id="blanc-unicode-nel"),
+    pytest.param(en_json({"text": "a"}), 200, id="un-caractere"),
+    pytest.param(en_json({"text": "a" * 2000}), 200, id="2000-caracteres"),
     pytest.param(en_json({"text": "a" * 2001}), 422, id="2001-caracteres"),
+    pytest.param(en_json({}), 422, id="champ-absent"),
+    pytest.param(en_json({"text": 42}), 422, id="autre-type"),
+    pytest.param(b"pas du json", 422, id="pas-du-json"),
 ]
 
 
@@ -41,13 +62,23 @@ CAS = [
 def test_frontieres_du_contrat(client, corps, code_attendu):
     reponse = client.post("/predict", content=corps, headers={"Content-Type": "application/json"})
     assert reponse.status_code == code_attendu
-    # Étape B.2 : pour chaque 422, vérifiez aussi la FORME de la réponse :
-    # « detail » doit être la liste d'erreurs standard de FastAPI (objets avec loc, msg, type).
+    if code_attendu == 422:
+        assert_422_standard(reponse)
+    else:
+        assert reponse.json()["label"] in ETIQUETTES_DU_CONTRAT
 
 
-# Étape B.5 : deux tests de propriété avec hypothesis, dans ce fichier.
-#   from hypothesis import given, settings, strategies as st
-#   1. tout texte de 1 à 2000 caractères contenant un caractère non blanc :
-#      200, étiquette du contrat, score entre 0 et 1 ;
-#   2. tout texte fait uniquement de blancs : 422, sous la forme standard.
-# Pensez à @settings(deadline=None) : le premier appel peut être plus lent que les autres.
+@settings(deadline=None)
+@given(texte=st.text(min_size=1, max_size=2000).filter(lambda t: t.strip()))
+def test_tout_texte_non_blanc_est_classe(client, texte):
+    reponse = client.post("/predict", json={"text": texte})
+    assert reponse.status_code == 200
+    corps = reponse.json()
+    assert corps["label"] in ETIQUETTES_DU_CONTRAT
+    assert 0.0 <= corps["score"] <= 1.0
+
+
+@settings(deadline=None)
+@given(texte=st.text(alphabet=st.sampled_from(BLANCS), min_size=1, max_size=50))
+def test_tout_texte_blanc_est_refuse_par_le_schema(client, texte):
+    assert_422_standard(client.post("/predict", json={"text": texte}))

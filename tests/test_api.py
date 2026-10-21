@@ -14,6 +14,7 @@ pytestmark = pytest.mark.skipif(not MODELE.exists(), reason="modèle non produit
 @pytest.fixture(scope="module")
 def client():
     from fastapi.testclient import TestClient
+
     from api.main import app
     with TestClient(app) as c:  # le "with" déclenche lifespan (chargement du modèle)
         yield c
@@ -55,3 +56,10 @@ def test_predict_texte_vide_422(client):
 def test_predict_champ_manquant_422(client):
     assert client.post("/predict", json={}).status_code == 422
     assert client.post("/predict", json={"text": 42}).status_code == 422
+
+
+def test_predict_mots_inventes_indetermine(client):
+    """TP4, T24 : aucun mot connu, confiance réduite à l'ordonnée à l'origine : abstention."""
+    r = client.post("/predict", json={"text": "xqzvb wlkptr grombu"})
+    assert r.status_code == 200
+    assert r.json()["label"] == "INDETERMINE"

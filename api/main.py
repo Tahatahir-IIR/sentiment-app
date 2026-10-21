@@ -65,23 +65,21 @@ async def health_check():
 async def predict(request: PredictRequest):
     """Renvoie le sentiment (POSITIVE ou NEGATIVE) et la confiance.
 
-    - 422 : texte vide ou trop long (Pydantic), ou refusé par le modèle
+    - 422 : texte vide, fait de blancs ou trop long (refusé par le schéma, jamais par le modèle)
     - 503 : modèle non chargé
-    - 500 : erreur inattendue (journalisée côté serveur, jamais renvoyée au client)
+    - 500 : toute panne du modèle (journalisée côté serveur, jamais renvoyée au client)
     """
     clf = _classifier()
     try:
         result = clf.predict(request.text)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
     except Exception:
         logger.exception("Erreur lors de la prédiction")
-        raise HTTPException(status_code=500, detail="Erreur interne du serveur")
+        raise HTTPException(status_code=500, detail="Erreur interne du serveur") from None
     logger.info("predict: %r -> %s (%.2f)", request.text[:50], result["label"], result["score"])
     return result
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover  (lancement direct, jamais exécuté sous pytest)
     import uvicorn
 
     uvicorn.run("api.main:app", host="0.0.0.0", port=8000, log_level="info")
