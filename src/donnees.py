@@ -3,6 +3,7 @@
 Les deux scripts doivent voir exactement le même jeu de test : le découpage
 vit donc ici, une seule fois, avec une graine fixe.
 """
+
 from pathlib import Path
 
 import pandas as pd
@@ -23,7 +24,9 @@ def charger(source: str) -> pd.DataFrame:
     """Renvoie un DataFrame à deux colonnes : review, label (positive/negative)."""
     if source == "demo":
         if not DEMO.exists():
-            raise FileNotFoundError("data/demo_reviews.csv absent : lancez d'abord python src/make_demo.py")
+            raise FileNotFoundError(
+                "data/demo_reviews.csv absent : lancez d'abord python src/make_demo.py"
+            )
         df = pd.read_csv(DEMO)
     elif source == "allocine":
         if not ALLOCINE_LOCAL.exists():
@@ -39,5 +42,9 @@ def charger(source: str) -> pd.DataFrame:
 def decouper(df: pd.DataFrame):
     """Découpage stratifié 80/20, AVANT toute vectorisation (sinon fuite de données)."""
     return train_test_split(
-        df["review"], df["label"], test_size=PART_TEST, random_state=GRAINE, stratify=df["label"]
+        df["review"],
+        df["label"],
+        test_size=PART_TEST,
+        random_state=GRAINE,
+        stratify=df["label"],
     )

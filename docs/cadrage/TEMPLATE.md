@@ -33,4 +33,3 @@ Cocher une seule case :
 
 
 ## Approche écartée et pourquoi (facultatif)
-

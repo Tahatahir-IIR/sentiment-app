@@ -47,7 +47,9 @@ def check_python() -> None:
     if (v.major, v.minor) == (3, 11):
         ok(f"version {v.major}.{v.minor}.{v.micro}")
     elif v.major == 3 and v.minor >= 10:
-        warn(f"version {v.major}.{v.minor} : le cours cible 3.11, ça devrait fonctionner")
+        warn(
+            f"version {v.major}.{v.minor} : le cours cible 3.11, ça devrait fonctionner"
+        )
     else:
         err(f"version {v.major}.{v.minor} : installer Python 3.11")
     in_venv = sys.prefix != getattr(sys, "base_prefix", sys.prefix)
@@ -91,7 +93,11 @@ def check_git() -> None:
     ok("dépôt Git détecté")
     try:
         out = subprocess.run(
-            ["git", "shortlog", "-sn", "--all"], cwd=ROOT, capture_output=True, text=True, check=True
+            ["git", "shortlog", "-sn", "--all"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=True,
         ).stdout.strip()
     except subprocess.CalledProcessError:
         warn("aucun commit encore")
@@ -100,10 +106,14 @@ def check_git() -> None:
     if len(authors) >= MIN_AUTHORS:
         ok(f"{len(authors)} auteurs de commits : {', '.join(authors)}")
     elif authors:
-        warn(f"{len(authors)} auteur(s) seulement : les deux membres doivent pousser un commit")
+        warn(
+            f"{len(authors)} auteur(s) seulement : les deux membres doivent pousser un commit"
+        )
     else:
         warn("aucun commit encore")
-    tracked = subprocess.run(["git", "ls-files"], cwd=ROOT, capture_output=True, text=True).stdout
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=ROOT, capture_output=True, text=True
+    ).stdout
     if ".venv/" in tracked or "\n.venv" in tracked:
         err(".venv/ est suivi par Git : git rm -r --cached .venv")
     else:
@@ -138,7 +148,9 @@ def main() -> int:
     if errors:
         print("Corriger les erreurs avant de pousser.")
     elif warnings:
-        print("Environnement utilisable ; traiter les avertissements avant la fin du TP.")
+        print(
+            "Environnement utilisable ; traiter les avertissements avant la fin du TP."
+        )
     else:
         print("Tout est en place.")
     return 1 if errors else 0

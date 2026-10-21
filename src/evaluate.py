@@ -5,6 +5,7 @@ pourquoi le modèle se trompe, pas seulement combien.
 
 Usage : python src/evaluate.py
 """
+
 import json
 import sys
 from pathlib import Path
@@ -44,7 +45,10 @@ def main() -> int:
         erreurs["type"] = types.loc[erreurs.index].values
     print(f"\n{len(erreurs)} erreurs sur {len(X_test)}")
     if "type" in erreurs:
-        print("Par type d'avis : " + ", ".join(f"{t} {n}" for t, n in erreurs["type"].value_counts().items()))
+        print(
+            "Par type d'avis : "
+            + ", ".join(f"{t} {n}" for t, n in erreurs["type"].value_counts().items())
+        )
     for _, e in erreurs.head(MAX_AFFICHES).iterrows():
         print(f"\n  vérité {e.verite}, prédit {e.prediction}")
         print(f"  {e.review[:200]}")

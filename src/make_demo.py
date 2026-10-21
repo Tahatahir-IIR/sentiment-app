@@ -10,6 +10,7 @@ Composition :
 Usage : python src/make_demo.py
 Produit : data/demo_reviews.csv (régénérable, donc hors de Git)
 """
+
 import random
 from pathlib import Path
 
@@ -47,9 +48,24 @@ NEGATIF = [
     "le tissu s'est déchiré au premier lavage",
     "batterie morte au bout d'une heure",
 ]
-CONCLUSION_POS = ["je recommande", "je rachèterai", "très satisfait", "cinq étoiles mérité"]
-CONCLUSION_NEG = ["je ne recommande pas", "à éviter", "très déçu", "plus jamais chez eux"]
-RETOURNEMENT = ["mais finalement", "sauf que ensuite", "pourtant au bout du compte", "mais au final"]
+CONCLUSION_POS = [
+    "je recommande",
+    "je rachèterai",
+    "très satisfait",
+    "cinq étoiles mérité",
+]
+CONCLUSION_NEG = [
+    "je ne recommande pas",
+    "à éviter",
+    "très déçu",
+    "plus jamais chez eux",
+]
+RETOURNEMENT = [
+    "mais finalement",
+    "sauf que ensuite",
+    "pourtant au bout du compte",
+    "mais au final",
+]
 NEUTRE = [
     "commande passée lundi, reçue jeudi",
     "article reçu dans le carton d'origine",
@@ -84,8 +100,12 @@ def neutre(rng, pente):
 def generer() -> pd.DataFrame:
     rng = random.Random(GRAINE)
     lignes = []
-    lignes += [(net(rng, POSITIF, CONCLUSION_POS), "positive", "net") for _ in range(80)]
-    lignes += [(net(rng, NEGATIF, CONCLUSION_NEG), "negative", "net") for _ in range(80)]
+    lignes += [
+        (net(rng, POSITIF, CONCLUSION_POS), "positive", "net") for _ in range(80)
+    ]
+    lignes += [
+        (net(rng, NEGATIF, CONCLUSION_NEG), "negative", "net") for _ in range(80)
+    ]
     lignes += [(mitige(rng, NEGATIF, POSITIF), "positive", "mitigé") for _ in range(50)]
     lignes += [(mitige(rng, POSITIF, NEGATIF), "negative", "mitigé") for _ in range(50)]
     lignes += [(neutre(rng, PENTE_POS), "positive", "neutre") for _ in range(15)]

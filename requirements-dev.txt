@@ -1,0 +1,8 @@
+# Dev dependencies (testing, linting, notebooks)
+-r requirements.txt
+
+# Extra dev tools
+pytest-cov==5.*
+black==24.*
+ruff==0.6.*
+ipykernel==6.*

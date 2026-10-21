@@ -2,6 +2,7 @@
 
 Usage : python src/predict.py "Produit cassé à l'arrivée"
 """
+
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -15,7 +16,9 @@ MODELE = RACINE / "models" / "sentiment.joblib"
 @lru_cache(maxsize=1)
 def _pipeline():
     if not MODELE.exists():
-        raise FileNotFoundError("models/sentiment.joblib absent : lancez d'abord python src/train.py")
+        raise FileNotFoundError(
+            "models/sentiment.joblib absent : lancez d'abord python src/train.py"
+        )
     return joblib.load(MODELE)
 
 

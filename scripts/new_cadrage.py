@@ -17,13 +17,18 @@ def main() -> int:
         return 2
     slug, title = sys.argv[1], sys.argv[2]
     if not re.fullmatch(r"[a-z0-9-]+", slug):
-        print("Le nom de fichier ne doit contenir que des minuscules, chiffres et tirets.")
+        print(
+            "Le nom de fichier ne doit contenir que des minuscules, chiffres et tirets."
+        )
         return 2
     target = TEMPLATE.parent / f"{slug}.md"
     if target.exists():
         print(f"{target} existe déjà.")
         return 1
-    target.write_text(TEMPLATE.read_text(encoding="utf-8").replace("<nom du cas>", title), encoding="utf-8")
+    target.write_text(
+        TEMPLATE.read_text(encoding="utf-8").replace("<nom du cas>", title),
+        encoding="utf-8",
+    )
     print(f"Fiche créée : {target.relative_to(ROOT)}")
     return 0
 

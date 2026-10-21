@@ -4,6 +4,7 @@ Deux tests lisent models/metrics.json, versionné : ils tournent partout, CI com
 Deux tests appellent predict() : ils sont ignorés si le modèle n'est pas là,
 ce qui est le cas en intégration continue (le modèle n'est jamais commité).
 """
+
 import json
 import sys
 from pathlib import Path
@@ -15,12 +16,16 @@ METRIQUES = ROOT / "models" / "metrics.json"
 MODELE = ROOT / "models" / "sentiment.joblib"
 CLES = {"source", "n_train", "n_test", "f1_macro", "seuil_f1_macro"}
 
-besoin_modele = pytest.mark.skipif(not MODELE.exists(), reason="modèle absent : python src/train.py")
+besoin_modele = pytest.mark.skipif(
+    not MODELE.exists(), reason="modèle absent : python src/train.py"
+)
 
 
 @pytest.fixture(scope="module")
 def metriques() -> dict:
-    assert METRIQUES.exists(), "models/metrics.json absent : lancez python src/train.py puis commitez-le"
+    assert (
+        METRIQUES.exists()
+    ), "models/metrics.json absent : lancez python src/train.py puis commitez-le"
     return json.loads(METRIQUES.read_text(encoding="utf-8"))
 
 
@@ -28,6 +33,7 @@ def metriques() -> dict:
 def predict():
     sys.path.insert(0, str(ROOT / "src"))
     from predict import predict as fonction
+
     return fonction
 
 
@@ -38,9 +44,9 @@ def test_metrics_file_is_complete(metriques):
 
 
 def test_f1_above_threshold(metriques):
-    assert metriques["f1_macro"] >= metriques["seuil_f1_macro"], (
-        f"F1 macro {metriques['f1_macro']} sous le seuil {metriques['seuil_f1_macro']}"
-    )
+    assert (
+        metriques["f1_macro"] >= metriques["seuil_f1_macro"]
+    ), f"F1 macro {metriques['f1_macro']} sous le seuil {metriques['seuil_f1_macro']}"
 
 
 @besoin_modele
@@ -52,5 +58,7 @@ def test_predict_returns_label_and_score(predict):
 
 @besoin_modele
 def test_predict_obvious_negative(predict):
-    r = predict("Produit cassé, service client injoignable, très déçu, à éviter absolument.")
+    r = predict(
+        "Produit cassé, service client injoignable, très déçu, à éviter absolument."
+    )
     assert r["label"] == "negative"
