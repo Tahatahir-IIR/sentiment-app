@@ -1,5 +1,4 @@
 """Tests d'environnement du TP1 : Python, paquets, structure, .gitignore."""
-
 import importlib
 import sys
 from pathlib import Path
@@ -15,9 +14,9 @@ def test_python_version():
 
 
 def test_virtualenv_active():
-    assert sys.prefix != getattr(
-        sys, "base_prefix", sys.prefix
-    ), "pytest doit tourner dans le venv : source .venv/bin/activate"
+    assert sys.prefix != getattr(sys, "base_prefix", sys.prefix), (
+        "pytest doit tourner dans le venv : source .venv/bin/activate"
+    )
 
 
 @pytest.mark.parametrize("module", ["pandas", "sklearn", "pytest"])
@@ -36,16 +35,14 @@ def test_required_file_exists(root: Path, filename):
 
 
 def test_requirements_pins_versions(root: Path):
-    lines = [ln.strip() for ln in (root / "requirements.txt").read_text().splitlines()]
-    lines = [ln for ln in lines if ln and not ln.startswith("#")]
+    lines = [ligne.strip() for ligne in (root / "requirements.txt").read_text().splitlines()]
+    lines = [ligne for ligne in lines if ligne and not ligne.startswith("#")]
     assert lines, "requirements.txt est vide"
     for line in lines:
         assert "==" in line, f"version non figée : {line}"
 
 
-@pytest.mark.parametrize(
-    "pattern", [".venv/", "__pycache__/", ".env", "models/", "mlruns/"]
-)
+@pytest.mark.parametrize("pattern", [".venv/", "__pycache__/", ".env", "models/", "mlruns/"])
 def test_gitignore_contains(root: Path, pattern):
     content = (root / ".gitignore").read_text(encoding="utf-8")
     assert pattern in content, f".gitignore doit contenir {pattern}"
@@ -58,8 +55,6 @@ def test_no_real_env_file_committed(root: Path):
         pytest.skip("pas un dépôt Git")
     import subprocess
 
-    tracked = subprocess.run(
-        ["git", "ls-files"], cwd=root, capture_output=True, text=True
-    ).stdout.split()
+    tracked = subprocess.run(["git", "ls-files"], cwd=root, capture_output=True, text=True).stdout.split()
     assert ".env" not in tracked, ".env est suivi par Git : git rm --cached .env"
     assert not any(p.startswith(".venv/") for p in tracked), ".venv/ est suivi par Git"

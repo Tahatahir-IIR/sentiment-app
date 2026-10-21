@@ -1,123 +1,101 @@
-"""Génère le jeu de démonstration : 290 avis clients, 145 de chaque classe.
+#!/usr/bin/env python
+"""Génère un jeu de démonstration d'avis en français, déterministe.
 
-Composition :
-  - 80 avis nettement positifs
-  - 80 avis nettement négatifs
-  - 100 avis mitigés : une moitié d'un sentiment, un retournement, une moitié
-    de l'autre. L'étiquette suit la seconde moitié, celle qui conclut.
-  - 30 avis neutres, factuels, avec une légère pente qui fixe l'étiquette.
+290 avis : 80 nettement positifs, 80 nettement négatifs, 100 mitigés
+(le sentiment qui compte est celui qui conclut la phrase) et 30 neutres
+rattachés à la classe la plus proche. Les avis mitigés sont volontaires :
+ils font commettre au modèle quelques erreurs instructives.
 
 Usage : python src/make_demo.py
-Produit : data/demo_reviews.csv (régénérable, donc hors de Git)
+Produit : data/demo_reviews.csv
 """
-
+import csv
 import random
 from pathlib import Path
-
-import pandas as pd
 
 RACINE = Path(__file__).resolve().parents[1]
 SORTIE = RACINE / "data" / "demo_reviews.csv"
 GRAINE = 42
 
-POSITIF = [
-    "livraison rapide et colis bien protégé",
-    "produit conforme à la description",
-    "service client réactif et aimable",
-    "très bon rapport qualité prix",
-    "qualité impeccable, je suis ravi",
-    "installation simple et notice claire",
-    "le vendeur a répondu en moins d'une heure",
-    "article solide et bien fini",
-    "remboursement effectué sans discussion",
-    "taille parfaite, tissu agréable",
-    "batterie qui tient toute la journée",
-    "emballage soigné, cadeau parfait",
+POSITIFS = [
+    "Service impeccable et livraison en avance",
+    "Produit conforme à la description, très satisfait",
+    "Excellent rapport qualité prix",
+    "Emballage soigné et finitions propres",
+    "Prise en main immédiate, notice claire",
+    "Le vendeur a répondu en moins d'une heure",
+    "Je recommande sans hésiter",
+    "Solide, léger, exactement ce que je cherchais",
 ]
-NEGATIF = [
-    "colis arrivé abîmé et incomplet",
-    "produit cassé à l'arrivée",
-    "service client injoignable",
-    "commande jamais reçue",
-    "remboursement toujours en attente",
-    "qualité médiocre, déçu",
-    "notice illisible et pièces manquantes",
-    "l'application plante sans arrêt",
-    "article différent de la photo",
-    "livraison avec trois semaines de retard",
-    "le tissu s'est déchiré au premier lavage",
-    "batterie morte au bout d'une heure",
+NEGATIFS = [
+    "Produit cassé à l'arrivée",
+    "Aucune réponse du service client",
+    "Commande jamais reçue et remboursement en attente",
+    "Se casse au bout de deux utilisations",
+    "Notice incompréhensible et pièces manquantes",
+    "Taille trop petite et retour payant",
+    "Application qui plante à chaque ouverture",
+    "Facture erronée, aucun geste commercial",
 ]
-CONCLUSION_POS = [
-    "je recommande",
-    "je rachèterai",
-    "très satisfait",
-    "cinq étoiles mérité",
+ATTENUATIONS = ["au début", "les premiers jours", "sur le papier", "à la livraison", "au déballage"]
+RETOURNEMENTS = ["mais finalement", "sauf que ensuite", "puis rapidement", "avant que", "jusqu'à ce que"]
+NEUTRES = [
+    "Reçu dans les délais annoncés",
+    "Conforme à la fiche produit",
+    "Rien de particulier à signaler",
+    "Usage standard, sans surprise",
+    "Livré, monté, utilisé",
 ]
-CONCLUSION_NEG = [
-    "je ne recommande pas",
-    "à éviter",
-    "très déçu",
-    "plus jamais chez eux",
-]
-RETOURNEMENT = [
-    "mais finalement",
-    "sauf que ensuite",
-    "pourtant au bout du compte",
-    "mais au final",
-]
-NEUTRE = [
-    "commande passée lundi, reçue jeudi",
-    "article reçu dans le carton d'origine",
-    "le produit correspond à la référence commandée",
-    "livré par le transporteur habituel",
-    "utilisé deux fois pour l'instant",
-]
-PENTE_POS = ["rien à redire", "ça fait le travail"]
-PENTE_NEG = ["rien d'extraordinaire", "un peu cher pour ce que c'est"]
 
 
-def phrase(rng, fragments, n):
-    return ", ".join(rng.sample(fragments, n))
+def phrases_nettes(modeles, etiquette, nombre, rng):
+    suffixes = ["", ", vraiment", ", comme prévu", " pour ce prix", " cette fois"]
+    return [(f"{rng.choice(modeles)}{rng.choice(suffixes)}.", etiquette) for _ in range(nombre)]
 
 
-def net(rng, fragments, conclusions):
-    texte = phrase(rng, fragments, rng.choice([2, 3]))
-    return f"{texte[0].upper()}{texte[1:]}, {rng.choice(conclusions)}."
-
-
-def mitige(rng, debut, fin):
-    """Pas de conclusion explicite : seul l'ordre des deux moitiés porte l'étiquette."""
-    texte = f"{phrase(rng, debut, rng.choice([1, 2]))}, {rng.choice(RETOURNEMENT)} {phrase(rng, fin, 2)}."
-    return texte[0].upper() + texte[1:]
-
-
-def neutre(rng, pente):
-    texte = f"{phrase(rng, NEUTRE, 2)}, {rng.choice(pente)}."
-    return texte[0].upper() + texte[1:]
-
-
-def generer() -> pd.DataFrame:
-    rng = random.Random(GRAINE)
+def phrases_mitigees(nombre, rng):
+    """Deux moitiés opposées : l'étiquette suit la seconde, celle qui conclut."""
     lignes = []
-    lignes += [
-        (net(rng, POSITIF, CONCLUSION_POS), "positive", "net") for _ in range(80)
-    ]
-    lignes += [
-        (net(rng, NEGATIF, CONCLUSION_NEG), "negative", "net") for _ in range(80)
-    ]
-    lignes += [(mitige(rng, NEGATIF, POSITIF), "positive", "mitigé") for _ in range(50)]
-    lignes += [(mitige(rng, POSITIF, NEGATIF), "negative", "mitigé") for _ in range(50)]
-    lignes += [(neutre(rng, PENTE_POS), "positive", "neutre") for _ in range(15)]
-    lignes += [(neutre(rng, PENTE_NEG), "negative", "neutre") for _ in range(15)]
+    for i in range(nombre):
+        if i % 2 == 0:
+            debut, fin, etiquette = rng.choice(POSITIFS), rng.choice(NEGATIFS), "negative"
+        else:
+            debut, fin, etiquette = rng.choice(NEGATIFS), rng.choice(POSITIFS), "positive"
+        lignes.append((f"{debut} {rng.choice(ATTENUATIONS)}, {rng.choice(RETOURNEMENTS)} {fin.lower()}.", etiquette))
+    return lignes
+
+
+def phrases_neutres(nombre, rng):
+    lignes = []
+    for i in range(nombre):
+        base = rng.choice(NEUTRES)
+        if i % 2 == 0:
+            lignes.append((f"{base}, {rng.choice(POSITIFS).lower()}.", "positive"))
+        else:
+            lignes.append((f"{base}, {rng.choice(NEGATIFS).lower()}.", "negative"))
+    return lignes
+
+
+def main() -> int:
+    rng = random.Random(GRAINE)
+    lignes = (
+        phrases_nettes(POSITIFS, "positive", 80, rng)
+        + phrases_nettes(NEGATIFS, "negative", 80, rng)
+        + phrases_mitigees(100, rng)
+        + phrases_neutres(30, rng)
+    )
     rng.shuffle(lignes)
-    return pd.DataFrame(lignes, columns=["review", "label", "type"])
+    SORTIE.parent.mkdir(parents=True, exist_ok=True)
+    with SORTIE.open("w", encoding="utf-8", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["review", "label"])
+        w.writerows(lignes)
+    positifs = sum(1 for _, e in lignes if e == "positive")
+    print(f"{len(lignes)} avis écrits dans {SORTIE.relative_to(RACINE)}")
+    print(f"  {positifs} positifs, {len(lignes) - positifs} négatifs")
+    print("  dont 100 avis mitigés et 30 neutres, volontairement difficiles")
+    return 0
 
 
 if __name__ == "__main__":
-    df = generer()
-    SORTIE.parent.mkdir(parents=True, exist_ok=True)
-    df.to_csv(SORTIE, index=False)
-    print(f"{len(df)} avis écrits dans {SORTIE.relative_to(RACINE)}")
-    print(df["label"].value_counts().to_string())
-    print(df["type"].value_counts().to_string())
+    raise SystemExit(main())

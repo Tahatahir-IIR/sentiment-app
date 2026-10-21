@@ -1,16 +1,11 @@
-# Semaine 3 : choix du seuil d'incertitude
+# Semaine 3 : l'API, notes du binôme
 
-Mesuré sur les 4 000 avis de test Allociné (modèle F1 macro 0,920, 318 erreurs, dont 181 avis négatifs classés positifs) :
+> Deux questions, quelques phrases chacune. Répondez avec ce que vous avez observé, pas avec le cours.
 
-| Seuil | Avis envoyés à un agent | Erreurs restant automatiques | Négatifs manqués sans relecture |
-| --- | --- | --- | --- |
-| 0,50 | 0 (0 %) | 318 | 181 |
-| 0,60 | 509 (12,7 %) | 126 | 74 |
-| 0,70 | 1 183 (29,6 %) | 49 | 28 |
-| 0,75 | 1 626 (40,6 %) | 27 | 17 |
+## 1. Pourquoi l'API refuse-t-elle de démarrer sans `models/sentiment.joblib`, plutôt que de démarrer et de répondre 503 ?
 
-Nous retenons le seuil de 0,60 : il envoie environ un avis sur huit à un agent et divise par 2,4 le nombre de clients mécontents traités en retard sans relecture (181 à 74).
+Modèle renommé, `uvicorn api.main:app` s'arrête aussitôt sur `FileNotFoundError: models/sentiment.joblib absent : lancez python src/train.py`, puis `Application startup failed. Exiting.` : la panne est visible au moment même du lancement, avec la commande qui la répare. Une API qui démarrerait quand même paraîtrait en marche (le processus tourne, le port répond) et ne servirait que des 503 : on ne découvrirait le problème qu'à la première requête d'un utilisateur. Le 503 reste utile pour l'autre cas, celui où le modèle disparaît alors que l'API tourne déjà (`_classifier()` dans `api/main.py`).
 
-Passer à 0,70 ferait encore tomber ces négatifs manqués à 28, mais au prix de près d'un avis sur trois relu à la main, ce qui retire l'essentiel de l'intérêt du tri automatique pour une équipe qui reçoit des milliers d'avis par jour ; le bon réglage se décide avec elle, selon le nombre d'agents disponibles.
+## 2. Un texte vide est refusé deux fois : par Pydantic, puis par `predict()`. Est-ce redondant ?
 
-Limite observée : le modèle est entraîné sur des critiques de films, et sur des avis de commerce en ligne il hésite même sur des cas nets (« Produit cassé à l'arrivée et service client injoignable » ne reçoit que 58 % de confiance, donc « à vérifier »), tandis qu'il classe négatif à 65 % un avis mitigé qui devrait être relu. Le seuil compense en partie ce décalage de domaine, mais seul un réentraînement sur des avis clients réels étiquetés le corrigerait.
+Non, les deux contrôles n'attrapent pas les mêmes textes. `{"text": ""}` est refusé par Pydantic (`min_length=1`) avec un 422 dont `detail` est une liste (`string_too_short`, `loc: ["body", "text"]`) ; `{"text": "   "}` passe Pydantic, puisqu'il a trois caractères, et c'est `predict()` qui le refuse, avec un 422 dont `detail` est la simple chaîne `"texte vide"`. Le second contrôle protège aussi `predict()` quand elle est appelée sans l'API (interface, scripts). Le défaut observé est ailleurs : le même refus arrive sous deux formes différentes, ce qu'un client de l'API doit gérer deux fois.

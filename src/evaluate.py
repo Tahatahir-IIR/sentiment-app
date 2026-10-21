@@ -1,59 +1,60 @@
-"""Évalue le modèle enregistré sur le même jeu de test qu'à l'entraînement.
+#!/usr/bin/env python
+"""Évalue le modèle sauvegardé et affiche la matrice de confusion.
 
-Affiche la matrice de confusion et chaque avis mal classé, pour comprendre
-pourquoi le modèle se trompe, pas seulement combien.
-
-Usage : python src/evaluate.py
+Usage :
+  python src/evaluate.py             # sur le jeu de démonstration
+  python src/evaluate.py --allocine  # sur le jeu Allociné
 """
-
-import json
+import argparse
 import sys
 from pathlib import Path
 
 import joblib
-import pandas as pd
 from sklearn.metrics import classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from donnees import DEMO, RACINE, charger, decouper  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # pour lancer depuis la racine
+from train import GRAINE, MODELE, charger  # mêmes constantes que l'entraînement
 
-MODELE = RACINE / "models" / "sentiment.joblib"
-METRIQUES = RACINE / "models" / "metrics.json"
-CLASSES = ["negative", "positive"]
-MAX_AFFICHES = 15
+RACINE = Path(__file__).resolve().parents[1]
+ETIQUETTES = ["negative", "positive"]
 
 
 def main() -> int:
-    if not MODELE.exists() or not METRIQUES.exists():
-        print("Modèle ou mesure absents : lancez d'abord python src/train.py")
-        return 1
-    source = json.loads(METRIQUES.read_text(encoding="utf-8"))["source"]
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--allocine", action="store_true")
+    args = parser.parse_args()
+
+    if not MODELE.exists():
+        raise SystemExit("Modèle absent : lancez d'abord python src/train.py")
     pipeline = joblib.load(MODELE)
-    _, X_test, _, y_test = decouper(charger(source))
+
+    df, source = charger(args.allocine)
+    # Même découpage que l'entraînement : même graine, mêmes proportions
+    _, X_test, _, y_test = train_test_split(
+        df["review"], df["label"], test_size=0.2, random_state=GRAINE, stratify=df["label"]
+    )
     y_pred = pipeline.predict(X_test)
 
-    print(f"Source : {source}, {len(X_test)} avis de test\n")
-    print(classification_report(y_test, y_pred, digits=3))
-    print("Matrice de confusion (lignes = vérité, colonnes = prédiction) :")
-    matrice = confusion_matrix(y_test, y_pred, labels=CLASSES)
-    print(pd.DataFrame(matrice, index=CLASSES, columns=CLASSES).to_string())
+    print(f"Évaluation sur {len(X_test)} avis ({source})\n")
+    print(classification_report(y_test, y_pred, digits=3, zero_division=0))
+    mc = confusion_matrix(y_test, y_pred, labels=ETIQUETTES)
+    print("Matrice de confusion (lignes = vérité, colonnes = prédiction)")
+    print(f"{'':>10}{ETIQUETTES[0]:>10}{ETIQUETTES[1]:>10}")
+    for nom, ligne in zip(ETIQUETTES, mc, strict=True):
+        print(f"{nom:>10}{ligne[0]:>10}{ligne[1]:>10}")
 
-    erreurs = pd.DataFrame({"review": X_test, "verite": y_test, "prediction": y_pred})
-    erreurs = erreurs[erreurs.verite != erreurs.prediction]
-    if source == "demo" and DEMO.exists():
-        types = pd.read_csv(DEMO)["type"]
-        erreurs["type"] = types.loc[erreurs.index].values
-    print(f"\n{len(erreurs)} erreurs sur {len(X_test)}")
-    if "type" in erreurs:
-        print(
-            "Par type d'avis : "
-            + ", ".join(f"{t} {n}" for t, n in erreurs["type"].value_counts().items())
-        )
-    for _, e in erreurs.head(MAX_AFFICHES).iterrows():
-        print(f"\n  vérité {e.verite}, prédit {e.prediction}")
-        print(f"  {e.review[:200]}")
+    faux_negatifs = mc[1][0]
+    faux_positifs = mc[0][1]
+    print(f"\n{faux_positifs} négatifs classés positifs, {faux_negatifs} positifs classés négatifs")
+
+    # Trois erreurs à lire, pour comprendre ce que le sac de mots ne voit pas
+    erreurs = [(t, v, p) for t, v, p in zip(X_test, y_test, y_pred, strict=True) if v != p]
+    print(f"\n{len(erreurs)} erreurs au total. Trois exemples :")
+    for texte, vrai, predit in erreurs[:3]:
+        print(f"  vérité={vrai:9s} prédit={predit:9s} | {texte[:90]}")
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

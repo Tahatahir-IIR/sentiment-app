@@ -1,38 +1,53 @@
-"""Prédiction sur un texte : la seule fonction que l'interface et l'API appelleront.
+#!/usr/bin/env python
+"""Prédiction unitaire : la fonction que l'API de la semaine 3 appellera.
 
-Usage : python src/predict.py "Produit cassé à l'arrivée"
+Usage :
+  python src/predict.py "Livraison rapide, très satisfait"
+  >>> from predict import predict ; predict("texte")
 """
-
 import sys
 from functools import lru_cache
 from pathlib import Path
+from typing import TypedDict
 
 import joblib
 
-RACINE = Path(__file__).resolve().parents[1]
-MODELE = RACINE / "models" / "sentiment.joblib"
+MODELE = Path(__file__).resolve().parents[1] / "models" / "sentiment.joblib"
+
+
+class Prediction(TypedDict):
+    """Sortie brute du modèle : ses propres classes, en minuscules."""
+
+    label: str
+    score: float
 
 
 @lru_cache(maxsize=1)
-def _pipeline():
+def charger_modele():
+    """Chargé une seule fois par processus, pas à chaque appel."""
     if not MODELE.exists():
-        raise FileNotFoundError(
-            "models/sentiment.joblib absent : lancez d'abord python src/train.py"
-        )
+        raise FileNotFoundError("models/sentiment.joblib absent : lancez python src/train.py")
     return joblib.load(MODELE)
 
 
-def predict(texte: str) -> dict:
-    """Renvoie {"label": "positive" ou "negative", "score": confiance entre 0,5 et 1}."""
+def predict(texte: str) -> Prediction:
+    """Renvoie {'label': 'positive'|'negative', 'score': float}."""
     if not isinstance(texte, str) or not texte.strip():
         raise ValueError("texte vide")
-    pipeline = _pipeline()
-    probas = pipeline.predict_proba([texte])[0]
-    i = int(probas.argmax())
-    return {"label": str(pipeline.classes_[i]), "score": float(probas[i])}
+    pipeline = charger_modele()
+    etiquette = pipeline.predict([texte])[0]
+    score = float(pipeline.predict_proba([texte]).max())
+    return {"label": str(etiquette), "score": round(score, 4)}
+
+
+def main() -> int:
+    if len(sys.argv) < 2:
+        print(__doc__)
+        return 2
+    resultat = predict(" ".join(sys.argv[1:]))
+    print(f"{resultat['label']} (confiance {resultat['score']:.0%})")
+    return 0
 
 
 if __name__ == "__main__":
-    for texte in sys.argv[1:] or ["Livraison rapide, produit conforme, je recommande."]:
-        r = predict(texte)
-        print(f"{r['label']:9s} {r['score']:.3f}  <- {texte}")
+    raise SystemExit(main())

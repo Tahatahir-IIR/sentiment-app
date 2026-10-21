@@ -1,108 +1,53 @@
-"""Interface de démonstration du classifieur de sentiment (TP3).
+"""Interface Streamlit (TP5) : elle appelle l'API, jamais le modèle.
 
-Usage, à la racine du dépôt : streamlit run ui/app.py
+Lancer, API déjà démarrée dans un autre terminal : streamlit run ui/app.py
 """
-
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # pour importer ui.client
 
 import pandas as pd
 import streamlit as st
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from helpers import (
-    SEUIL_INCERTITUDE,
-    charger_predicteur,
-    classer,
-    predire_lot,
-    resumer,
-)  # noqa: E402
+from ui import client
 
-st.set_page_config(page_title="Avis clients : tri par sentiment", page_icon="💬")
-st.title("Avis clients : faire remonter les négatifs")
-st.caption(
-    "Modèle du TP2 (TF-IDF et régression logistique). "
-    f"Sous {SEUIL_INCERTITUDE:.0%} de confiance, l'avis est envoyé à un agent."
-)
+st.set_page_config(page_title="Analyse de sentiment")
+st.title("Analyse de sentiment des avis")
 
+session = client.creer_session()
+etat = client.sante(session)
+if etat.ok:
+    st.caption(f"API prête : {etat.message}")
+else:
+    st.error(etat.message)
 
-@st.cache_resource
-def predicteur():
-    """Chargé une seule fois : sans cache, le modèle serait relu à chaque clic."""
-    return charger_predicteur()
-
-
-try:
-    predire = predicteur()
-except FileNotFoundError as erreur:
-    st.error(str(erreur))
-    st.info("Dans un terminal, à la racine du dépôt : `python src/train.py --allocine`")
-    st.stop()
-
-onglet_avis, onglet_lot, onglet_aide = st.tabs(
-    ["Un avis", "Un fichier CSV", "Comment ça marche"]
-)
+onglet_avis, onglet_lot = st.tabs(["Un avis", "Un fichier d'avis"])
 
 with onglet_avis:
-    texte = st.text_area(
-        "Avis client",
-        height=120,
-        placeholder="Produit cassé à l'arrivée et service client injoignable.",
-    )
-    if st.button("Analyser", type="primary"):
-        try:
-            r = classer(texte, predire)
-        except ValueError:
-            st.warning("Saisissez un avis avant d'analyser.")
+    texte = st.text_area("Avis client")
+    if st.button("Analyser"):
+        reponse = client.predire(session, texte)
+        if reponse.ok and reponse.label is not None and reponse.score is not None:
+            st.metric(client.VERDICTS[reponse.label], f"{reponse.score:.0%}")
+            if reponse.label == "INDETERMINE":
+                st.info("La confiance est sous le seuil d'abstention : un humain doit trancher.")
+        elif reponse.message == client.REFUS:
+            st.warning(reponse.message)
         else:
-            if r["incertain"]:
-                st.warning(f"À vérifier par un agent (penche vers « {r['label']} »)")
-            elif r["label"] == "negative":
-                st.error("Avis négatif : à traiter en priorité")
-            else:
-                st.success("Avis positif")
-            st.progress(float(r["score"]), text=f"Confiance : {r['score']:.0%}")
+            st.error(reponse.message)
 
 with onglet_lot:
-    fichier = st.file_uploader("Fichier CSV avec une colonne « review »", type="csv")
+    fichier = st.file_uploader("Fichier CSV avec une colonne text", type="csv")
     if fichier is not None:
-        try:
-            df = predire_lot(pd.read_csv(fichier), predire)
-        except (KeyError, ValueError) as erreur:
-            st.error(str(erreur).strip("'\""))
+        avis = pd.read_csv(fichier)
+        if "text" not in avis.columns:
+            st.error("Colonne text absente du fichier.")
         else:
-            r = resumer(df)
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Avis analysés", r["total"])
-            c2.metric(
-                "Avis négatifs détectés", f"{r['negatifs']} ({r['part_negatifs']} %)"
-            )
-            c3.metric("Cas à vérifier", r["a_verifier"])
-            st.bar_chart(df["verdict"].value_counts())
-            df = df.sort_values(["prediction", "confiance"], ascending=[True, False])
-            st.dataframe(df, use_container_width=True, hide_index=True)
-            st.download_button(
-                "Télécharger les résultats",
-                df.to_csv(index=False).encode("utf-8"),
-                file_name="avis_classes.csv",
-                mime="text/csv",
-            )
-
-with onglet_aide:
-    st.markdown(
-        f"""
-**Ce que fait l'outil.** Il lit un avis et prédit s'il est positif ou négatif,
-avec une confiance entre 50 % et 100 %.
-
-**Les trois verdicts.**
-- Rouge : avis négatif, à traiter en priorité.
-- Vert : avis positif.
-- Orange : confiance sous {SEUIL_INCERTITUDE:.0%}, un agent doit le lire.
-
-**Ses limites.** Le modèle compte les mots sans regarder leur ordre. Un avis qui
-commence bien et finit mal (« livraison rapide, mais produit cassé ») le trompe
-souvent : c'est pour ces cas que le verdict orange existe.
-
-**D'où il vient.** Entraîné sur 16 000 avis Allociné, F1 macro 0,920 sur 4 000 avis de test.
-"""
-    )
+            reponses = client.predire_lot(session, avis["text"].astype(str).tolist())
+            avis["verdict"] = [client.VERDICTS[r.label] if r.ok and r.label else r.message for r in reponses]
+            avis["confiance"] = [r.score for r in reponses]
+            st.dataframe(avis, use_container_width=True)
+            st.write(client.resumer(reponses))
+            st.download_button("Télécharger les résultats", avis.to_csv(index=False),
+                               file_name="resultats.csv", mime="text/csv")

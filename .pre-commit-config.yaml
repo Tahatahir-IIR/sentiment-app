@@ -1,24 +1,17 @@
+# Vérifications lancées à chaque « git commit » (TP4, étape E).
+# Installation, une fois par clone : pre-commit install
+# Les outils sont ceux de l'environnement virtuel : activez-le avant de commiter.
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: trailing-whitespace
-      - id: end-of-file-fixer
-      - id: check-yaml
-      - id: check-json
-      - id: check-merge-conflict
-      - id: check-added-large-files
-        args: ["--maxkb=10000"]
-      - id: debug-statements
-
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
-    hooks:
-      - id: black
-        language_version: python3
-
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.6.9
+  - repo: local
     hooks:
       - id: ruff
-        args: [--fix]
+        name: ruff (erreurs probables, imports)
+        entry: ruff check --force-exclude
+        language: system
+        types: [python]
+      - id: mypy
+        name: mypy (contrat typé de l'API)
+        entry: mypy api
+        language: system
+        types: [python]
+        pass_filenames: false
